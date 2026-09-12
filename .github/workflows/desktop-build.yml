@@ -10,7 +10,8 @@ on:
     paths:
       - "desktop_app.py"
       - "demo.py"
-      - "liquid_agent.py"
+      - "local_agent.py"
+      - "connectors.py"
       - "webapp.py"
       - "web/**"
       - "requirements-desktop.txt"
@@ -48,6 +49,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-desktop.txt
 
+      - name: Syntax check
+        run: |
+          python -m py_compile desktop_app.py local_agent.py connectors.py webapp.py demo.py
+
       - name: Build Windows executable
         if: runner.os == 'Windows'
         shell: pwsh
@@ -56,6 +61,10 @@ jobs:
             --name SecretAgent `
             --add-data "web;web" `
             --collect-all webview `
+            --collect-all mcp `
+            --collect-all mcp_types `
+            --collect-all httpx2 `
+            --hidden-import anyio._backends._asyncio `
             desktop_app.py
           Copy-Item dist\SecretAgent.exe dist\SecretAgent-Windows.exe
 
@@ -68,6 +77,10 @@ jobs:
             --osx-bundle-identifier ai.secretagent.desktop \
             --add-data "web:web" \
             --collect-all webview \
+            --collect-all mcp \
+            --collect-all mcp_types \
+            --collect-all httpx2 \
+            --hidden-import anyio._backends._asyncio \
             desktop_app.py
           hdiutil create \
             -volname "Secret Agent" \
