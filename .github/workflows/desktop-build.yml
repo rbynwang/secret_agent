@@ -10,11 +10,16 @@ on:
     paths:
       - "desktop_app.py"
       - "demo.py"
-      - "liquid_agent.py"
+      - "local_agent.py"
+      - "connectors.py"
       - "webapp.py"
       - "web/**"
       - "requirements-desktop.txt"
       - ".github/workflows/desktop-build.yml"
+
+concurrency:
+  group: secret-agent-desktop-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -48,6 +53,52 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-desktop.txt
 
+      - name: Syntax check
+        run: |
+          python -m py_compile desktop_app.py local_agent.py connectors.py webapp.py demo.py
+
+      - name: Bundle llama.cpp runtime for Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://github.com/ggml-org/llama.cpp/releases/download/b10516/llama-b10516-bin-win-cpu-x64.zip'
+          Invoke-WebRequest -Uri $url -OutFile llama-runtime.zip
+          $hash = (Get-FileHash llama-runtime.zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne 'fbbbc55e0eb2e1b07f9dcb9488616c98ed47d9003b90e15e7c8c7812c4307cd3') {
+            throw "llama.cpp runtime checksum mismatch: $hash"
+          }
+          New-Item -ItemType Directory -Force -Path build_resources\llama | Out-Null
+          New-Item -ItemType Directory -Force -Path llama-unpack | Out-Null
+          Expand-Archive -Path llama-runtime.zip -DestinationPath llama-unpack -Force
+          $server = Get-ChildItem -Path llama-unpack -Recurse -Filter llama-server.exe | Select-Object -First 1
+          if (-not $server) { throw 'llama-server.exe not found in runtime archive' }
+          Copy-Item -Path (Join-Path $server.Directory.FullName '*') -Destination build_resources\llama -Recurse -Force
+          if (-not (Test-Path build_resources\llama\llama-server.exe)) { throw 'Bundled llama-server.exe missing after copy' }
+
+      - name: Bundle llama.cpp runtime for macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCH="$(uname -m)"
+          if [ "$ARCH" = "arm64" ]; then
+            URL='https://github.com/ggml-org/llama.cpp/releases/download/b10516/llama-b10516-bin-macos-arm64.tar.gz'
+            EXPECTED='ee3324327d621026ae80c24031670e65fa62a0b23a3a027dbe2f65f240affd30'
+          else
+            URL='https://github.com/ggml-org/llama.cpp/releases/download/b10516/llama-b10516-bin-macos-x64.tar.gz'
+            EXPECTED='b7adecf7bd2cde577ddabee8357a72409165d8104f43b4acee9f1b98cc9c447a'
+          fi
+          curl -fL --retry 3 "$URL" -o llama-runtime.tar.gz
+          ACTUAL="$(shasum -a 256 llama-runtime.tar.gz | awk '{print $1}')"
+          test "$ACTUAL" = "$EXPECTED"
+          mkdir -p llama-unpack build_resources/llama
+          tar -xzf llama-runtime.tar.gz -C llama-unpack
+          SERVER="$(find llama-unpack -type f -name llama-server | head -n 1)"
+          test -n "$SERVER"
+          cp -R "$(dirname "$SERVER")"/* build_resources/llama/
+          chmod +x build_resources/llama/llama-server
+
       - name: Build Windows executable
         if: runner.os == 'Windows'
         shell: pwsh
@@ -55,7 +106,12 @@ jobs:
           pyinstaller --noconfirm --clean --windowed --onefile `
             --name SecretAgent `
             --add-data "web;web" `
+            --add-data "build_resources\llama;bundled_llama" `
             --collect-all webview `
+            --collect-all mcp `
+            --collect-all mcp_types `
+            --collect-all httpx2 `
+            --hidden-import anyio._backends._asyncio `
             desktop_app.py
           Copy-Item dist\SecretAgent.exe dist\SecretAgent-Windows.exe
 
@@ -67,7 +123,12 @@ jobs:
             --name SecretAgent \
             --osx-bundle-identifier ai.secretagent.desktop \
             --add-data "web:web" \
+            --add-data "build_resources/llama:bundled_llama" \
             --collect-all webview \
+            --collect-all mcp \
+            --collect-all mcp_types \
+            --collect-all httpx2 \
+            --hidden-import anyio._backends._asyncio \
             desktop_app.py
           hdiutil create \
             -volname "Secret Agent" \

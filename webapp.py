@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Browser UI for the Secret Agent procedural-memory demo."""
+"""Browser UI for the Secret Agent organizational-memory desktop app."""
 
 from __future__ import annotations
 
@@ -9,21 +9,18 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from connectors import connector_statuses, connect_granola, disconnect_granola
 from demo import list_tasks, seed_database
-from liquid_agent import MODEL, run_agent
+from local_agent import MODEL, run_agent
 
 PRODUCT_NAME = "Secret Agent"
-
-# Bind on all interfaces so the same entrypoint works locally and on hosted
-# platforms such as Render/Railway. Those platforms conventionally inject PORT.
-HOST = os.environ.get("COMMONTASKS_HOST") or os.environ.get("HOST") or "0.0.0.0"
+HOST = os.environ.get("COMMONTASKS_HOST") or os.environ.get("HOST") or "127.0.0.1"
 PORT = int(os.environ.get("PORT") or os.environ.get("COMMONTASKS_PORT", "8000"))
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
 
 
 def build_prompt(message: str, history: list[dict[str, Any]]) -> str:
-    """Include recent employee context while leaving task knowledge in the corpus."""
     recent = history[-12:]
     lines: list[str] = []
     for item in recent:
@@ -31,12 +28,10 @@ def build_prompt(message: str, history: list[dict[str, Any]]) -> str:
         content = str(item.get("content", "")).strip()
         if content:
             lines.append(f"{role.upper()}: {content}")
-
     if not lines:
         return message
     return (
-        "Continue this employee conversation. Case-specific facts must come from this conversation. "
-        "Retrieve the relevant procedure, reference, and examples from the corpus before doing the task.\n\n"
+        "Continue this employee conversation. Case-specific facts must come from the conversation or retrieved organization context.\n\n"
         "Recent conversation:\n"
         + "\n".join(lines)
         + f"\nUSER: {message}"
@@ -56,57 +51,65 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _index(self) -> None:
-        """Serve the existing frontend with Secret Agent product branding."""
-        html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
-        html = html.replace("CommonTasks", PRODUCT_NAME)
-        html = html.replace('<div class="mark">C</div>', '<div class="mark">S</div>')
-        html = html.replace('<div class="wmark">C</div>', '<div class="wmark">S</div>')
-        html = html.replace('<div class="aavatar">C</div>', '<div class="aavatar">S</div>')
-        body = html.encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+    def _read_json(self) -> dict[str, Any]:
+        length = int(self.headers.get("Content-Length", "0"))
+        if length < 0 or length > 2_000_000:
+            raise ValueError("invalid request size")
+        if length == 0:
+            return {}
+        return json.loads(self.rfile.read(length).decode("utf-8"))
 
     def do_GET(self) -> None:
         if self.path == "/api/health":
-            self._json(200, {
-                "ok": True,
-                "product": PRODUCT_NAME,
-                "model": MODEL,
-                "inference": "OpenRouter",
-                "tasks": len(list_tasks()["tasks"]),
-            })
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "product": PRODUCT_NAME,
+                    "model": MODEL,
+                    "inference": "Local device",
+                    "network_for_model": False,
+                    "tasks": len(list_tasks()["tasks"]),
+                    **connector_statuses(),
+                },
+            )
+            return
+        if self.path == "/api/connectors":
+            self._json(200, connector_statuses())
             return
         if self.path in {"/", "/index.html"}:
-            self._index()
-            return
+            return super().do_GET()
         super().do_GET()
 
     def do_POST(self) -> None:
-        if self.path != "/api/chat":
-            self._json(404, {"error": "not found"})
-            return
-
         try:
-            length = int(self.headers.get("Content-Length", "0"))
-            if length <= 0 or length > 1_000_000:
-                raise ValueError("invalid request size")
-            payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            message = str(payload.get("message", "")).strip()
-            history = payload.get("history") or []
-            if not message:
-                raise ValueError("message is required")
-            if not isinstance(history, list):
-                raise ValueError("history must be a list")
+            if self.path == "/api/chat":
+                payload = self._read_json()
+                message = str(payload.get("message", "")).strip()
+                history = payload.get("history") or []
+                if not message:
+                    raise ValueError("message is required")
+                if not isinstance(history, list):
+                    raise ValueError("history must be a list")
+                answer = run_agent(build_prompt(message, history), verbose=False)
+                self._json(200, {"answer": answer, "model": MODEL})
+                return
 
-            answer = run_agent(build_prompt(message, history), verbose=False)
-            self._json(200, {"answer": answer, "model": MODEL})
+            if self.path == "/api/connect/granola":
+                self._read_json()
+                result = connect_granola()
+                self._json(200 if result.get("ok") else 500, result)
+                return
+
+            if self.path == "/api/disconnect/granola":
+                self._read_json()
+                result = disconnect_granola()
+                self._json(200 if result.get("ok") else 500, result)
+                return
+
+            self._json(404, {"error": "not found"})
         except Exception as exc:
-            self._json(500, {"error": str(exc)})
+            self._json(500, {"error": f"{type(exc).__name__}: {exc}"})
 
     def log_message(self, fmt: str, *args: Any) -> None:
         print(f"[web] {self.address_string()} - {fmt % args}")
@@ -118,11 +121,8 @@ def main() -> None:
         f"{PRODUCT_NAME} ready: {info['corpus_rows']:,} procedural-memory records across "
         f"{info['tasks']} tasks in {info['database']}"
     )
-    print(f"Hosted model: {MODEL} via OpenRouter")
-    if HOST in {"0.0.0.0", "::"}:
-        print(f"Open http://localhost:{PORT} locally; hosted platforms will expose their public URL.")
-    else:
-        print(f"Open http://{HOST}:{PORT}")
+    print(f"Local model: {MODEL}")
+    print(f"Open http://{HOST}:{PORT}")
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
 
 
