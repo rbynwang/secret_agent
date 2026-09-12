@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Secret Agent — it knows what your company knows</title>
+<meta name="description" content="An offline-architecture SLM coworker over your company's own knowledge graph. Current answers, real citations, honest uncertainty.">
+<style>
+:root{color-scheme:light;--ink:#141414;--grey:#8f8f8f;--faint:#c9c9c9;--ghost:#dedede;--line:#e9e9e7;--paper:#fff;--red:#b3261e;--mono:ui-monospace,"SF Mono",Menlo,Consolas,"Courier New",monospace}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;line-height:1.55}
+a{color:inherit;text-decoration:none}.wrap{width:min(1080px,calc(100% - 44px));margin:auto}
+.mono{font-family:var(--mono)}
+/* nav */
+nav{border-bottom:1px solid var(--line);background:#fffffff2;backdrop-filter:blur(8px);position:sticky;top:0;z-index:50}
+.navrow{display:flex;align-items:center;justify-content:center;gap:26px;padding:14px 0;font-size:12.5px;color:#555}
+.navrow .logo{display:flex;align-items:center;gap:7px;font-weight:700;color:var(--ink);font-size:13px;margin-right:6px}
+.navrow a:not(.logo):not(.pillbtn):hover{color:var(--ink)}
+.pillbtn{background:var(--ink);color:#fff;border-radius:999px;padding:8px 17px;font-size:12.5px;font-weight:600;margin-left:6px}
+.pillbtn:hover{background:#000}
+/* hero */
+.hero{position:relative;text-align:center;padding:110px 0 130px;overflow:hidden}
+.ascii{position:absolute;top:115px;width:330px;height:auto;pointer-events:none;user-select:none}
+.ascii.left{left:-58px}.ascii.right{right:-58px;top:140px;transform:scaleX(-1)}
+@media(max-width:1560px){.ascii{width:270px}.ascii.left{left:-52px}.ascii.right{right:-52px}}
+@media(max-width:1240px){.ascii{width:210px}.ascii.left{left:-44px}.ascii.right{right:-44px}}
+@media(max-width:1000px){.ascii{display:none}}
+.hero-inner{position:relative;z-index:2}
+.h-eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--grey)}
+h1{margin:16px 0 0;font-size:clamp(34px,4.6vw,52px);line-height:1.12;letter-spacing:-.03em;font-weight:640}
+h1 .dim{display:block;color:#b5b5b5;font-weight:560}
+.sub{margin:18px auto 0;max-width:480px;color:var(--grey);font-size:14px}
+.ctas{margin-top:32px;display:flex;justify-content:center;align-items:center;gap:18px;flex-wrap:wrap}
+.cta{background:var(--ink);color:#fff;border-radius:999px;padding:13px 26px;font-size:13.5px;font-weight:600;display:inline-flex;gap:8px;align-items:center}
+.cta:hover{background:#000;transform:translateY(-1px)}.cta small{opacity:.6}
+.ghostlink{font-family:var(--mono);font-size:12px;color:var(--grey);border-bottom:1px dotted var(--faint);padding-bottom:2px}.ghostlink:hover{color:var(--ink)}
+.clearance{margin-top:40px;display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--grey);border:1px solid var(--line);padding:9px 18px;line-height:1.9}
+.clearance b{color:var(--ink)}.clearance .vio{color:#6d28d9;font-weight:700}
+/* section scaffolding */
+section{padding:74px 0;border-top:1px solid var(--line)}
+.sechead{font-family:var(--mono);font-size:11px;letter-spacing:.24em;color:var(--red);text-transform:uppercase}
+h2{margin:12px 0 8px;font-size:clamp(24px,3vw,34px);letter-spacing:-.025em;font-weight:640;line-height:1.15}
+.lead{max-width:600px;color:var(--grey);font-size:14.5px;margin:0}
+/* exhibits (A/B) */
+.duel{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:38px}
+.file{border:1px solid var(--ink);background:#fff;font-family:var(--mono);font-size:12.5px;position:relative}
+.file .fhead{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--ink);padding:10px 14px;font-size:11px;letter-spacing:.12em}
+.file .fhead b{font-size:11.5px}
+.stamp{border:2px solid var(--red);color:var(--red);font-weight:700;font-size:10px;letter-spacing:.18em;padding:3px 8px;transform:rotate(-4deg)}
+.stamp.ok{border-color:var(--ink);color:var(--ink)}
+.fbody{padding:18px 16px 16px}
+.q{color:var(--grey);font-size:11.5px;margin-bottom:14px}.q::before{content:"QUERY: ";color:var(--ink);font-weight:700}
+.fieldrow{display:grid;grid-template-columns:118px 1fr;gap:8px;padding:4px 0;font-size:12px}
+.fieldrow dt{color:var(--grey);letter-spacing:.04em}.fieldrow dd{margin:0;color:var(--ink)}
+.bigans{font-size:21px;font-weight:700;margin:2px 0 12px}
+.bigans.wrong{text-decoration:line-through;text-decoration-color:var(--red);text-decoration-thickness:2.5px;color:#555}
+.redact{background:var(--ink);color:var(--ink);border-radius:1px;padding:0 3px;user-select:none}
+.fnote{border-top:1px dashed var(--ghost);padding:11px 16px;font-size:11px;color:var(--grey);line-height:1.6}
+/* dossier */
+.dossier{border:1px solid var(--ink);margin-top:38px;font-family:var(--mono)}
+.dhead{border-bottom:1px solid var(--ink);padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.dhead .t{font-size:12px;letter-spacing:.14em;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.dhead .warn{font-size:10px;letter-spacing:.2em;color:var(--red);font-weight:700}
+.dgrid{display:grid;grid-template-columns:250px 1fr;gap:0}
+.dphoto{border-right:1px solid var(--line);padding:18px;display:flex;flex-direction:column;align-items:center;gap:12px}
+.dphoto pre{margin:0;font-size:9px;line-height:9.5px;letter-spacing:.5px;color:var(--ink);background:#fafafa;border:1px solid var(--line);padding:14px 10px}
+.dphoto .cap{font-size:9.5px;letter-spacing:.16em;color:var(--grey)}
+.dfields{padding:18px 22px;font-size:12.5px}
+.dfields .fieldrow{grid-template-columns:190px 1fr}
+.dspec{border-top:1px solid var(--ink);display:grid;grid-template-columns:250px 1fr}
+.dspec .col1{border-right:1px solid var(--line);padding:16px 18px}
+.dspec .col2{padding:16px 22px}
+.dspec h4{margin:0 0 10px;font-size:11px;letter-spacing:.16em;text-decoration:underline;text-underline-offset:3px}
+.speclist{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 22px;font-size:12px;margin:0;padding:0;list-style:none}
+.speclist li{padding:3px 0;color:#333}.speclist li::before{content:"- ";color:var(--grey)}
+.speclist li i{display:block;font-style:normal;color:var(--grey);font-size:10.5px;padding-left:12px}
+.dnote{border-top:1px solid var(--ink);padding:14px 18px;font-size:11.5px;line-height:1.75;color:#333}
+.dnote b{letter-spacing:.05em}
+/* chain of custody */
+.pipe{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:38px;border:1px solid var(--line)}
+.step{padding:22px 20px;border-right:1px solid var(--line)}.step:last-child{border-right:0}
+.step .n{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;color:var(--grey);margin-bottom:10px}
+.step h3{margin:0 0 6px;font-size:14.5px;font-weight:640}.step p{margin:0;font-size:12.5px;color:var(--grey)}
+/* field report */
+.split{display:grid;grid-template-columns:1.05fr .95fr;gap:44px;align-items:start;margin-top:36px}
+.list{display:grid;gap:10px;margin:18px 0 0;padding:0;list-style:none}
+.list li{display:flex;gap:10px;font-size:13.5px;color:#444}
+.list .tick{font-family:var(--mono);color:var(--ink);font-weight:700}
+.report{border:1px solid var(--ink);font-family:var(--mono);font-size:12.5px}
+.report .rhead{border-bottom:1px solid var(--ink);padding:10px 14px;font-size:10.5px;letter-spacing:.18em}
+.rrow{display:flex;justify-content:space-between;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);align-items:baseline}
+.rrow:last-of-type{border-bottom:0}
+.rrow b{font-size:16px}.rrow .up{color:var(--ink);font-weight:700}
+.rfoot{border-top:1px dashed var(--ghost);padding:10px 14px;font-size:10.5px;color:var(--grey)}
+/* protocol */
+.layers{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:36px}
+.layer .lt{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;color:var(--grey)}
+.layer h3{margin:10px 0 6px;font-size:15.5px;font-weight:640}
+.layer p{margin:0;font-size:13px;color:var(--grey)}
+.layer{border-top:2px solid var(--ink);padding-top:14px}
+/* cta */
+.finale{text-align:center;padding:96px 0 90px;border-top:1px solid var(--line)}
+.finale h2{max-width:560px;margin:14px auto 10px}
+.finale p{max-width:480px;margin:0 auto;color:var(--grey);font-size:14px}
+footer{border-top:1px solid var(--line);padding:22px 0 30px}
+.footrow{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--grey)}
+@media(max-width:900px){.ascii{display:none}.duel,.split{grid-template-columns:1fr}.pipe{grid-template-columns:1fr 1fr}.step:nth-child(2){border-right:0}.step{border-bottom:1px solid var(--line)}.step:nth-child(n+3){border-bottom:0}.dgrid,.dspec{grid-template-columns:1fr}.dphoto{border-right:0;border-bottom:1px solid var(--line)}.dspec .col1{border-right:0;border-bottom:1px solid var(--line)}.speclist{grid-template-columns:1fr 1fr}.layers{grid-template-columns:1fr}.navrow{gap:14px;flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<nav><div class="navrow wrap">
+  <a class="logo" href="#top">🕶 Secret Agent</a>
+  <a href="#exhibits">Exhibits</a><a href="#dossier">Case file</a><a href="#custody">Method</a><a href="#report">Field report</a><a href="https://github.com/rbynwang/secret_agent" target="_blank" rel="noopener">GitHub</a>
+  <a class="pillbtn" href="/app">Open the demo</a>
+</div></nav>
+
+<header class="hero" id="top">
+<img class="ascii left" src="agent-halftone.svg" alt="" aria-hidden="true">
+<img class="ascii right" src="agent-halftone.svg" alt="" aria-hidden="true">
+  <div class="hero-inner">
+    <div class="h-eyebrow">FILE № 138 · ORGANIZATIONAL MEMORY DIVISION</div>
+    <h1><span class="dim">It knows what</span>your company knows.</h1>
+    <p class="sub">A small language model with clearance to your organization's own memory — who said what, what changed, what's still unresolved. Answers arrive with speakers, dates, sources, and honest confidence.</p>
+    <div class="ctas">
+      <a class="cta" href="/app">Open the demo</a>
+      <a class="ghostlink" href="#exhibits">review the evidence ↓</a>
+    </div>
+
+
+    <div class="clearance">POWERED BY A <b>SMALL LANGUAGE MODEL</b> — <span class="vio">FAST. PRIVATE. EFFICIENT.</span><br>KNOWLEDGE, GRAPH &amp; RETRIEVAL NEVER LEAVE THE BUILDING</div>
+  </div>
+</header>
+
+<section id="exhibits">
+  <div class="wrap">
+    <div class="sechead">Exhibits A &amp; B · Do not guess</div>
+    <h2>The newest match isn't the truth.</h2>
+    <p class="lead">One real question from the reference company. The official manual says one thing; outside counsel later overruled it — in a phone call no keyword search ranks first.</p>
+    <div class="duel">
+      <div class="file">
+        <div class="fhead"><b>EXHIBIT A</b> — NAIVE RETRIEVAL <span class="stamp">STALE SOURCE</span></div>
+        <div class="fbody">
+          <div class="q">How long do we have to file a UHC reconsideration?</div>
+          <div class="bigans wrong">60 days</div>
+          <dl>
+            <div class="fieldrow"><dt>SOURCE:</dt><dd>Timely-Filing SOP</dd></div>
+            <div class="fieldrow"><dt>DATED:</dt><dd>November 2025</dd></div>
+            <div class="fieldrow"><dt>SELECTED BY:</dt><dd>keyword similarity, rank #1</dd></div>
+            <div class="fieldrow"><dt>CAVEATS:</dt><dd>none offered</dd></div>
+          </dl>
+        </div>
+        <div class="fnote">Confidently wrong. The most <i>similar</i> document is a stale SOP — and nothing tells the model it was overruled ten months later.</div>
+      </div>
+      <div class="file">
+        <div class="fhead"><b>EXHIBIT B</b> — 🕶 SECRET AGENT <span class="stamp ok">VERIFIED</span></div>
+        <div class="fbody">
+          <div class="q">How long do we have to file a UHC reconsideration?</div>
+          <div class="bigans">90 days</div>
+          <dl>
+            <div class="fieldrow"><dt>AUTHORITY:</dt><dd>§7.3, participation agreement (delegated contracts)</dd></div>
+            <div class="fieldrow"><dt>SPEAKER:</dt><dd>R. Goldman, external counsel</dd></div>
+            <div class="fieldrow"><dt>RECORDED:</dt><dd>legal call · 2026-08-05 · memo on file</dd></div>
+            <div class="fieldrow"><dt>SUPERSEDES:</dt><dd>SOP-007 (Nov 2025, “60 days”) — flagged stale</dd></div>
+            <div class="fieldrow"><dt>CONFIDENCE:</dt><dd>HIGH — 2 independent sources</dd></div>
+          </dl>
+        </div>
+        <div class="fnote">The graph follows the <b>supersedes</b> edge to the current truth — and files its receipts.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="dossier">
+  <div class="wrap">
+    <div class="sechead">Personnel file</div>
+    <h2>Case file: the agent itself.</h2>
+    <div class="dossier">
+      <div class="dhead"><span class="t">ORGANIZATIONAL MEMORY DIVISION — CASE FILE</span><span class="warn">DO NOT COPY / RUNS ON-PREMISES</span></div>
+      <div class="dgrid">
+        <div class="dphoto">
+<pre>
+  ......................
+ : ################### :
+ :#####################:
+  ▐███████▌ _ ▐███████▌
+   ▐█████▌     ▐█████▌
+    ▀███▀       ▀███▀
+  :...................:
+        .       .
+         :.....:
+</pre>
+          <div class="cap">SUBJECT — NO PHOTOGRAPH ON FILE</div>
+        </div>
+        <div class="dfields">
+          <dl>
+            <div class="fieldrow"><dt>Code Name:</dt><dd>Secret Agent</dd></div>
+            <div class="fieldrow"><dt>Class:</dt><dd>Small language model, 2.6B parameters (Liquid)</dd></div>
+            <div class="fieldrow"><dt>Handler:</dt><dd>Deterministic retrieval layer — the agent never touches the database</dd></div>
+            <div class="fieldrow"><dt>Memory:</dt><dd>Claims graph: every statement carries speaker, date, source, status</dd></div>
+            <div class="fieldrow"><dt>Clearance:</dt><dd>Level 4 — your organization only</dd></div>
+            <div class="fieldrow"><dt>Home Address:</dt><dd><span class="redact">█████████████</span> (on-device)</dd></div>
+            <div class="fieldrow"><dt>Known Conduct:</dt><dd>Cites everything; states uncertainty; refuses to invent resolutions</dd></div>
+            <div class="fieldrow"><dt>Status:</dt><dd>ACTIVE — v1</dd></div>
+          </dl>
+        </div>
+      </div>
+      <div class="dspec">
+        <div class="col1">
+          <h4>LICENCES</h4>
+          <ul class="speclist" style="grid-template-columns:1fr">
+            <li>Evidence-based confidence</li>
+            <li>Citation on every claim</li>
+            <li>Abstention, when warranted</li>
+          </ul>
+        </div>
+        <div class="col2">
+          <h4>SPECIALIST FIELDS — 12 RETRIEVAL SKILLS</h4>
+          <ul class="speclist">
+            <li>recall <i>the latest on any account</i></li>
+            <li>timeline <i>history, in order</i></li>
+            <li>person <i>what she actually said</i></li>
+            <li>decision <i>why, on what evidence</i></li>
+            <li>follow_up <i>promises &amp; overdue items</i></li>
+            <li>change <i>what superseded what</i></li>
+            <li>frequency <i>what keeps being asked</i></li>
+            <li>consensus <i>do experts agree</i></li>
+            <li>contradiction <i>live disagreements</i></li>
+            <li>evidence <i>source of truth</i></li>
+            <li>routing <i>who to ask, who's backup</i></li>
+            <li>gap <i>asked often, documented never</i></li>
+          </ul>
+        </div>
+      </div>
+      <div class="dnote"><b>ASSESSMENT:</b> Subject is thought to be immune to the disorder afflicting most retrieval systems — mistaking the most similar document for the most current one. Subject preserves both sides of unresolved disagreements and is deemed reliable under tense circumstances. Exercise caution when discussing undocumented processes near the agent: it will file them as knowledge gaps.</div>
+    </div>
+  </div>
+</section>
+
+<section id="custody">
+  <div class="wrap">
+    <div class="sechead">Chain of custody</div>
+    <h2>Small model. Strong external memory.</h2>
+    <p class="lead">The model never writes a query and never sees a raw table. Deterministic code handles retrieval and evidence; the model handles language at the edges.</p>
+    <div class="pipe">
+      <div class="step"><div class="n">01 · COLLECT</div><h3>Company artifacts</h3><p>Slack, meetings, tickets, email, expert calls — normalized by connectors into auditable markdown.</p></div>
+      <div class="step"><div class="n">02 · PROCESS</div><h3>Claims graph</h3><p>Every statement becomes a claim linked by supersedes, contradicts, agrees, promised.</p></div>
+      <div class="step"><div class="n">03 · RETRIEVE</div><h3>12 skills</h3><p>Deterministic traversals return compact evidence packs with computed confidence.</p></div>
+      <div class="step"><div class="n">04 · REPORT</div><h3>SLM composes</h3><p>Citations required, uncertainty stated, resolutions never invented.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="report">
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <div class="sechead">Field report</div>
+        <h2>Measured, not vibes.</h2>
+        <p class="lead">A 60-question benchmark over the reference corpus, with gold-labeled evidence and deliberately planted traps — including the stale document keyword search loves most.</p>
+        <ul class="list">
+          <li><span class="tick">[✓]</span>Retrieval-only comparison — no model in the loop, reproducible offline</li>
+          <li><span class="tick">[✓]</span>Graph wins precisely where multi-hop reasoning matters</li>
+          <li><span class="tick">[✓]</span>Caveats on the record in the repo — no vector arm yet, generic search only</li>
+        </ul>
+      </div>
+      <div class="report">
+        <div class="rhead">BENCHMARK — CONDITION A (GRAPH) VS B (NAIVE) · k=10</div>
+        <div class="rrow"><span>Precision@10</span><span><b>21.0</b> vs 14.5</span></div>
+        <div class="rrow"><span>Follow-up questions, recall</span><span class="up">+23 pts ▲</span></div>
+        <div class="rrow"><span>Recurring-question detection</span><span class="up">+20 pts ▲</span></div>
+        <div class="rrow"><span>Skill gold tests</span><span><b>30/30</b> GREEN</span></div>
+        <div class="rfoot">SOURCE-DOCUMENT GRANULARITY · FULL METHODOLOGY: bench/RESULTS.md</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="protocol">
+  <div class="wrap">
+    <div class="sechead">Deployment protocol</div>
+    <h2>Onboard any company in three layers.</h2>
+    <p class="lead">Nothing company-specific lives in code. A law firm, a clinic, and a claims processor differ in nouns; the skills are the verbs.</p>
+    <div class="layers">
+      <div class="layer"><div class="lt">LAYER A · SHIPS WITH THE PRODUCT</div><h3>The universal engine</h3><p>The 12 skills, the graph schema, and the decision policy: cite everything, compute confidence from evidence, never settle a live disagreement.</p></div>
+      <div class="layer"><div class="lt">LAYER B · ONBOARDING</div><h3>Your data, structured</h3><p>Connectors normalize artifacts to auditable markdown; extraction produces claims, entities, and links — human-reviewed before anything is trusted.</p></div>
+      <div class="layer"><div class="lt">LAYER C · EMERGENT</div><h3>Skills that grow</h3><p>Recurring gaps become drafted procedure pages; common composites — meeting prep, deal review — become one-command briefs.</p></div>
+    </div>
+  </div>
+</section>
+
+<div class="finale">
+  <div class="sechead">Your move</div>
+  <h2>Ask it something your search bar can't answer.</h2>
+  <p>The live demo runs on the reference company — 60 documents, 239 claims, one stale SOP, one unresolved argument, three overdue promises. Flip the A/B toggle and watch naive RAG take the bait.</p>
+  <div class="ctas"><a class="cta" href="/app">Open the demo</a><a class="ghostlink" href="https://github.com/rbynwang/secret_agent" target="_blank" rel="noopener">read the source →</a></div>
+</div>
+
+<footer><div class="wrap footrow">
+  <span>🕶 SECRET AGENT · BUILT AT SUNDAI №138</span>
+  <span>ALL REFERENCE-COMPANY DATA IS SYNTHETIC · NOTHING HERE IS CLASSIFIED, IT JUST DRESSES LIKE IT</span>
+</div></footer>
+</body>
+</html>
