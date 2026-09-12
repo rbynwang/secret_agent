@@ -17,6 +17,10 @@ on:
       - "requirements-desktop.txt"
       - ".github/workflows/desktop-build.yml"
 
+concurrency:
+  group: secret-agent-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
