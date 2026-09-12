@@ -1,0 +1,105 @@
+name: Build Secret Agent desktop apps
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - "desktop_app.py"
+      - "demo.py"
+      - "liquid_agent.py"
+      - "webapp.py"
+      - "web/**"
+      - "requirements-desktop.txt"
+      - ".github/workflows/desktop-build.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: SecretAgent-Windows
+            artifact_path: dist/SecretAgent-Windows.exe
+          - os: macos-latest
+            artifact_name: SecretAgent-macOS
+            artifact_path: dist/SecretAgent-macOS.dmg
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install desktop build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-desktop.txt
+
+      - name: Build Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --windowed --onefile `
+            --name SecretAgent `
+            --add-data "web;web" `
+            --collect-all webview `
+            desktop_app.py
+          Copy-Item dist\SecretAgent.exe dist\SecretAgent-Windows.exe
+
+      - name: Build macOS application
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --clean --windowed \
+            --name SecretAgent \
+            --osx-bundle-identifier ai.secretagent.desktop \
+            --add-data "web:web" \
+            --collect-all webview \
+            desktop_app.py
+          hdiutil create \
+            -volname "Secret Agent" \
+            -srcfolder dist/SecretAgent.app \
+            -ov \
+            -format UDZO \
+            dist/SecretAgent-macOS.dmg
+
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download built installers
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Secret Agent $GITHUB_REF_NAME" \
+            --generate-notes
